@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>export to .mid for GarageBand(Mac)</title>
+    <style>
+        html {
+            font-family: Arial, Helvetica, sans-serif;
+            text-align: center;
+        }
+
+        input::file-selector-button {
+            font-size: 20px;
+            color: #EE1;
+            text-shadow: 0.5px 0.5px 0 #555;
+            font-weight: bold;
+            width: 8em;
+            height: 3em;
+            border-radius: 8px;
+            border: 3px solid #6AD;
+            background-color: aqua;
+            margin-right: 10px;
+        }
+
+        input {
+            font-size: 18px;
+            margin: 20px;
+        }
+
+        img {
+            max-width: 30%;
+            border: 1px solid;
+            margin: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>MacのGarageBandで作ったものを.midにエクスポートする補助用サイト。</h1>
+    <input type="file" id="files" multiple accept="audio/aiff">
+    <h2>使い方</h2>
+    <p>GarageBandで全てのリージョンを選択し、ファイル＞リージョンをループライブラリに追加…を選択してそのまま作成を押します。</p>
+    <p>そしてこのページの「ファイル選択」を押して~/Library/Audio/Apple Loops/User Loops/SingleFiles/にアクセスして先ほど書き出されたリージョンのファイル全てを選択します。</p>
+    <p>アクセスする方法は、ファイル選択画面で⌘⇧Gを押して上にある~/Library/.../SingleFiles/をコピペすればできます。またよく使う方はSingleFilesのエイリアスを作りましょう。</p>
+    <h2>注意点</h2>
+    <p>ドラムは対応していません。ドラムもmidiにしたい場合は、GarageBandで音色をドラム以外に変更してからお試しください。</p>
+    <p>リージョンの開始位置は揃えてください。</p>
+    <img src="failure.png" alt="リージョンを別の位置で開始してしまうと変換後ずれる">
+    <img src="correct.png" alt="リージョンの開始位置を全て揃えると成功する">
+    <p class="minisize">いかなる損害に関しても一切責任を負いません。また予告なしにサービスの停止をする場合がございます。ご了承ください。</p>
+    <script>
+        const input = document.getElementById('files');
+        input.onchange = () => {
+            const files = input.files;
+            let filesText = [];
+            if (files.length > 0) {
+                Array.from(files).forEach((file => {
+                    let reader = new FileReader();
+                    reader.onload = (rFile) => {
+                        const byteArray = new Uint8Array(rFile.target.result);
+                        const hexString = Array.from(byteArray, function (byte) {
+                            return ('0' + (byte & 0xFF).toString(16)).slice(-2);
+                        }).join('')
+                        filesText.push(hexString);
+                        if (filesText.length == files.length) {
+                            filesReadFinished(filesText);
+                        }
+                    };
+                    reader.readAsArrayBuffer(file);
+                }));
+            }
+        };
+        function filesReadFinished(filesText) {
+            const filteredText = filesText.filter((iFile) => {
+                return (iFile.toUpperCase().includes('4D54726B') && iFile.toUpperCase().includes('434853'));
+            });
+            const midiText = filteredText.map(t => {
+                return t.toUpperCase().substr(t.toUpperCase().indexOf('4D546864000000060000000101E04D54726B') + 28, t.toUpperCase().indexOf('434853'));
+            });
+            if (midiText.length < 65535) {
+                const header_chunk = '4D546864000000060001' + midiText.length.toString(16).padStart(4, '0') + '01E0';
+                const track_chunks = midiText.map(t => {
+                    return (t.substr(0, t.indexOf('FF2F00')) + 'FF2F00');
+                });
+                const trackchunks_replace = [];
+                for (let i = 0; i < track_chunks.length; i++) {
+                    let f = i.toString(16);
+                    if (i == 10) {
+                        f = 'F';
+                    }
+                    if (i < 15) {
+                        f = 'E';
+                    }
+                    trackchunks_replace.push(track_chunks[i].replace(/(?<=((?<!.)((?:.{2})+)))90/g, `9${f}`).replace(/(?<=((?<!.)((?:.{2})+)))80/g, `8${f}`));
+                }
+                const midiData = header_chunk + trackchunks_replace.join('');
+                const key = '0123456789ABCDEF';
+                let newBytes = [];
+                let currentChar = 0;
+                let currentByte = 0;
+                for (let i = 0; i < midiData.length; i++) {
+                    currentChar = key.indexOf(midiData[i]);
+                    if (i % 2 === 0) {
+                        currentByte = (currentChar << 4);
+                    }
+                    if (i % 2 === 1) {
+                        currentByte += (currentChar);
+                        newBytes.push(currentByte);
+                    }
+                }
+                const buffer = new Uint8Array(newBytes);
+                var blob = new Blob([buffer], { type: "audio/midi" });
+                var url = window.URL.createObjectURL(blob);
+
+                var a = document.createElement("a");
+                a.href = url;
+                a.download = "garageband2midi.mid";
+                a.click();
+                window.URL.revokeObjectURL(url);
+            }
+        }   
+    </script>
+</body>
+
+</html>
