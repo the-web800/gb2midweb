@@ -90,7 +90,7 @@
                     if (i == 10) {
                         f = 'F';
                     }
-                    if (i < 15) {
+                    if (i > 15) {
                         f = 'E';
                     }
                     trackchunks_replace.push(track_chunks[i].replace(/(?<=((?<!.)((?:.{2})+)))90/g, `9${f}`).replace(/(?<=((?<!.)((?:.{2})+)))80/g, `8${f}`));
